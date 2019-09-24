@@ -12,30 +12,28 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDF;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.StringObjectInspector;
-import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.IntWritable;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 
 /**
- * Returns the number that corresponds to the longest prefix of a number found in lookup table
+ * Returns the code that corresponds to the longest prefix of a number found in lookup table
  *
  * @author dartov
  */
-@Description(name = "longest_prefix", value = "_FUNC_(s, lookupfile) – Returns the number that corresponds to the longest prefix of a number found in lookup table")
-public class LookupPrefix extends GenericUDF {
+@Description(name = "longest_prefix_int", value = "_FUNC_(s, lookupfile) – Returns the code that corresponds to the longest prefix of a number found in lookup table")
+public class LookupPrefixInt extends GenericUDF {
 
     private StringObjectInspector numberInspector;
     private StringObjectInspector fileInspector;
 
-    // This lookup contains prefixes
-    private Set<String> lookup;
+    // This lookup contains pairs (prefix, prefix_id)
+    private Map<String, Integer> lookup;
 
 
     @Override
@@ -45,19 +43,19 @@ public class LookupPrefix extends GenericUDF {
         }
         this.numberInspector = (StringObjectInspector) objectInspectors[0];
         this.fileInspector = (StringObjectInspector) objectInspectors[1];
-        return PrimitiveObjectInspectorFactory.writableStringObjectInspector;
+        return PrimitiveObjectInspectorFactory.writableIntObjectInspector;
     }
 
     @Override
-    public Text evaluate(DeferredObject[] deferredObjects) throws HiveException {
+    public IntWritable evaluate(DeferredObject[] deferredObjects) throws HiveException {
        if (lookup == null) {
             initHdfsLookup(fileInspector.getPrimitiveJavaObject(deferredObjects[1].get()));
         }
         String searchPrefix = (String) numberInspector.getPrimitiveJavaObject(deferredObjects[0].get());
 
         while (!searchPrefix.isEmpty()) {
-            if (lookup.contains(searchPrefix)) {
-                return new Text(searchPrefix);
+            if (lookup.containsKey(searchPrefix)) {
+                return new IntWritable(lookup.get(searchPrefix));
             } else {
                 searchPrefix = reducePrefixByOne(searchPrefix);
             }
@@ -67,7 +65,7 @@ public class LookupPrefix extends GenericUDF {
 
     @Override
     public String getDisplayString(String[] strings) {
-        return "Method call: longest_prefix(" + strings[0] + ", " + strings[1] + ")";
+        return "Method call: longest_prefix_int(" + strings[0] + ", " + strings[1] + ")";
     }
 
     private void initHdfsLookup(String lookupFile) throws HiveException {
@@ -87,10 +85,10 @@ public class LookupPrefix extends GenericUDF {
     protected void initMap(InputStream in) throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(in));
         String line;
-        lookup = new HashSet<String>();
+        lookup = new HashMap<String, Integer>();
         while ((line = reader.readLine()) != null) {
             String[] split = line.split(",");
-            lookup.add(split[0]);
+            lookup.put(split[0], Integer.valueOf(split[1]));
         }
         reader.close();
     }
